@@ -4,29 +4,12 @@ import json
 from pymavlink import mavutil
 
 
-def linear_dict_search(inp_dict, input_value):
-    for key in inp_dict:
-        if inp_dict[key] == input_value:
-            return key
-    return -1
-
 
 class FlightRadarAPI():
 
     def __init__(self):
         self.load_balancer_link = 'http://www.flightradar24.com/balance.json'
-        self.server_data_link = self.choose_server(self.load_balancer_link)
-
-        self.airports_link = "http://www.flightradar24.com/_json/airports.php"
-        self.airports = self.get_airports(self.airports_link)
-
-        self.airlines_link = "http://www.flightradar24.com/_json/airlines.php"
-        self.airlines = self.get_airlines(self.airlines_link)
-
-        self.zones_link = "http://www.flightradar24.com/js/zones.js.php"
-        self.zones = self.get_zones(self.zones_link)
-
-        self._aircrafts_link = None
+        self.server_data_link = self.choose_server()
 
     def parce_json(self, link):
         try:
@@ -43,68 +26,16 @@ class FlightRadarAPI():
         # print(data)
         return data.json()
 
-    def choose_server(self, load_balancer_options):
-        load_balancer = self.parce_json(load_balancer_options)
+    def choose_server(self):
+        server_data_link = None
+        load_balancer = self.parce_json(self.load_balancer_link)
         server_data_link_num = sorted(load_balancer.values())[0]
-        server_data_link = linear_dict_search(load_balancer, server_data_link_num)
-        return server_data_link
+        #try to find the requested server for use
+        for key in load_balancer:
+            if load_balancer[key] == server_data_link_num:
+                return key
+        return -1 #pick the last server
 
-    def get_airports(self, link):
-        """
-        Return list of all airports. Every airport is a dict
-        :param link: link to the airport api
-        :return: list
-        """
-        return self.parce_json(link)["rows"]
-
-    def is_there_airport_with_iata(self, iata):
-        airports_dict = self.airports
-        for airport in airports_dict:
-            if airport["iata"] == iata:
-                return True
-        return False
-
-    def get_airlines(self, link):
-        return self.parce_json(link)
-
-    def get_zones(self, link):
-        return self.parce_json(link)
-
-    def get_aircrafts(self):
-        """
-        Get all aircrafts
-        :rtype : dict
-        :return: dict with all aircrafts
-        """
-        return self.get_aircrafts_by_zone("full")
-
-    def get_aircrafts_by_flight_num(self, flight_num):
-        all_aircrafts_new_dict = dict()
-        all_aircrafts_dict = self.get_aircrafts()
-        for flight_id in all_aircrafts_dict:
-            if flight_id != "full_count" and flight_id != "version":
-                fi = [flight_id, ]
-                # print(fi)
-                res = all_aircrafts_dict[flight_id] + fi
-                # print(res)
-                # print(str(all_aircrafts_dict[flight_id][13]))
-                all_aircrafts_new_dict[str(all_aircrafts_dict[flight_id][13])] = res
-        try:
-            return all_aircrafts_new_dict[flight_num]
-        except KeyError:
-            return "No such flight"
-
-    def get_aircrafts_by_zone(self, zone):
-        self._aircrafts_link = "http://{}/zones/fcgi/{}_all.json".format(self.server_data_link, zone)
-        return self.parce_json(self._aircrafts_link)
-
-    def get_zone_by_coord(self, lon, lat):
-        for zone in self.zones:
-            print(zone)
-            #TODO make this work?
-
-    def _get_zone(self, zone, start_zone):
-        pass
 
     def get_aircrafts_by_bounds(self, lat_ne, lat_sw, lng_sw, lng_ne, **kwargs):
         """
@@ -151,11 +82,6 @@ class FlightRadarAPI():
             print("Wrong filter parameters. Nothing filtered")
             return info["aircraft"]
 
-    def get_aircraft_info(self, flight_id):
-        aircraft_link = "http://{}/_external/planedata_json.1.4.php?f={}".format(self.server_data_link, flight_id)
-        info = self.parce_json(aircraft_link)
-        return info
-
 def format_aircraft_data(aircrafts):
     
     for aircraft in aircrafts:
@@ -180,40 +106,12 @@ def format_aircraft_data(aircrafts):
         flight_name_dest = aircraft[17]
         unsure = aircraft[18]
     print ""
-    
-    """
-     <message id="246" name="ADSB_VEHICLE">
-          <description>The location and information of an ADSB vehicle</description>
-          <field type="uint32_t" name="ICAO_address">ICAO address</field>
-          <field type="int32_t" name="lat">Latitude, expressed as degrees * 1E7</field>
-          <field type="int32_t" name="lon">Longitude, expressed as degrees * 1E7</field>
-          <field type="uint8_t" name="altitude_type" enum="ADSB_ALTITUDE_TYPE">Type from ADSB_ALTITUDE_TYPE enum</field>
-          <field type="float" name="altitude">Altitude(ASL) in meters</field>
-          <field type="uint16_t" name="heading">Course over ground in centidegrees</field>
-          <field type="float" name="hor_velocity">The horizontal velocity in meters/second</field>
-          <field type="float" name="ver_velocity">The vertical velocity in meters/second, positive is up</field>
-          <field type="char[9]" name="callsign">The callsign, 8+null</field>
-          <field type="uint8_t" name="emitter_type" enum="ADSB_EMITTER_TYPE">Type from ADSB_EMITTER_TYPE enum</field>
-          <field type="uint8_t" name="tslc">Time since last communication in seconds</field>
-          <field type="uint16_t" name="flags" enum="ADSB_FLAGS">Flags to indicate various statuses including valid data fields</field>
-        </message>
-    """
 
 if __name__ == "__main__":
     
     import time
     flapi = FlightRadarAPI()
     print(flapi.server_data_link)
-#     print(flapi.airports)
-#     print(flapi.airlines)
-#     print(flapi.zones)
-#     print(flapi.get_aircrafts_by_zone("atlantic"))
-#     print(flapi.get_aircraft_info("50e10b0"))
-#
-
     while True:
         rep = (flapi.get_aircrafts_by_bounds(-29, -40, 128, 143))
         format_aircraft_data(rep)
-        
-#     print(flapi.get_zone_by_coord(60.599637, 56.834280))
-#     print(flapi.get_aircrafts_by_flight_num("SU1501"))
