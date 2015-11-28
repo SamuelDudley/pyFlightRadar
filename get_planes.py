@@ -1,7 +1,9 @@
 __author__ = 'danmir'
 import requests
 import json
-from pymavlink import mavutil
+import time
+from pymavlink import mavutil, mavextra
+
 
 
 
@@ -10,6 +12,7 @@ class FlightRadarAPI():
     def __init__(self):
         self.load_balancer_link = 'http://www.flightradar24.com/balance.json'
         self.server_data_link = self.choose_server()
+        self.last_request_time = time.time()
 
     def parce_json(self, link):
         try:
@@ -35,11 +38,15 @@ class FlightRadarAPI():
             if load_balancer[key] == server_data_link_num:
                 return key
         return -1 #pick the last server
+    
+    def get_aircraft_near_location(self, lat, lon, distance):
+        (lat_ne,lng_ne) = mavextra.gps_offset(lat, lon, distance, distance)
+        (lat_sw,lng_sw) = mavextra.gps_offset(lat, lon, -distance, -distance)
+        return self.get_aircraft_by_bounds(lat_ne, lat_sw, lng_sw, lng_ne)
 
-
-    def get_aircrafts_by_bounds(self, lat_ne, lat_sw, lng_sw, lng_ne, **kwargs):
+    def get_aircraft_by_bounds(self, lat_ne, lat_sw, lng_sw, lng_ne, **kwargs):
         """
-        Get all aircrafts by given bounds
+        Get all aircraft given bounds
         Filter information in addition:
             "filter_type" = ["from_iata" | "to_iata"]
             "iata" = [iata]
@@ -50,16 +57,11 @@ class FlightRadarAPI():
         :return: list
         """
         # Expand zone a little
-        """
         lat_ne = int(lat_ne) + 1
         lat_sw = int(lat_sw) - 1
         lng_ne = int(lng_ne) + 1
         lng_sw = int(lng_sw) - 1
-        """
-        lat_ne = int(lat_ne)
-        lat_sw = int(lat_sw)
-        lng_ne = int(lng_ne)
-        lng_sw = int(lng_sw)
+       
         
         zone_link = "http://{}/zones/fcgi/feed.js?bounds={},{},{},{}&adsb=1&mlat=1&flarm=1&faa=1&estimated=1&air=1&gnd=1&vehicles=1&gliders=1&array=1".format(self.server_data_link, lat_ne, lat_sw, lng_sw, lng_ne)
         # print(zone_link)
@@ -110,8 +112,14 @@ def format_aircraft_data(aircrafts):
 if __name__ == "__main__":
     
     import time
+    airspace_size = (500000,50000)  #(north to south, east to west)m
+    poll_time = 0.5#sec
+    
     flapi = FlightRadarAPI()
     print(flapi.server_data_link)
     while True:
-        rep = (flapi.get_aircrafts_by_bounds(-29, -40, 128, 143))
-        format_aircraft_data(rep)
+        if time.time() - flapi.last_request_time > poll_time:
+            rep = flapi.get_aircraft_near_location(lat=-34.92, lon=138.52, distance=max(airspace_size))
+            format_aircraft_data(rep)
+            flapi.last_request_time = time.time()
+        time.sleep(0.1)
